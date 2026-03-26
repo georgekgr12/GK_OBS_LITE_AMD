@@ -2,37 +2,71 @@
   <img src="Logo-removebg-preview.png" alt="OBS Lite AMD Edition" width="180">
 </p>
 
-<h1 align="center">OBS Lite AMD Edition</h1>
+<h1 align="center">GK OBS Lite AMD Edition</h1>
 
 <p align="center">
-  <strong>Stripped-down, AMD-optimized OBS for streaming and recording with minimal resource usage.</strong>
+  <strong>Stripped-down, AMD-optimized OBS for streaming and recording with minimal resource usage.</strong><br>
+  <em>~85% less RAM than stock OBS. Fixes AMD bitrate spikes. Built for gamers.</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/georgekgr12/GK_OBS_LITE_AMD/releases">Releases</a> &bull;
+  <a href="https://github.com/georgekgr12/GK_OBS_LITE_AMD_RELEASES/releases">Download</a> &bull;
   <a href="#features">Features</a> &bull;
-  <a href="#building">Building</a> &bull;
-  <a href="#whats-removed">What's Removed</a>
+  <a href="#performance">Performance</a> &bull;
+  <a href="#amd-encoder-fixes">AMD Fixes</a> &bull;
+  <a href="#building">Building</a>
 </p>
 
 ---
 
 ## What is this?
 
-OBS Lite AMD Edition is a **lightweight fork of [OBS Studio](https://obsproject.com) 31.0.3**, built exclusively for **AMD hardware on Windows**. It strips out everything you don't need (NVIDIA encoders, Intel QSV, macOS/Linux code, the browser plugin, scripting) and optimizes what's left for AMD Zen 3+ CPUs and RDNA GPUs.
+GK OBS Lite AMD Edition is a **lightweight fork of [OBS Studio](https://obsproject.com) 31.0.3**, built exclusively for **AMD hardware on Windows**. It strips out everything you don't need, optimizes what's left for AMD Zen 3+ CPUs and RDNA GPUs, and **fixes real AMD encoder bugs** that cause bitrate spikes and drops during streaming.
 
-The result: faster startup, lower RAM usage, smaller binary, and AMD hardware encoding (AMF) as a first-class citizen instead of an afterthought.
+## Performance
+
+| Metric | Stock OBS 31.0.3 | GK OBS Lite AMD |
+|--------|-------------------|-----------------|
+| **RAM (idle)** | ~300-400 MB | **~52 MB** |
+| **Threads** | ~50-60 | **~15** |
+| **Plugin DLLs** | ~30+ | **12** |
+| **Disk size** | ~500+ MB | **139 MB** (installer) |
+| **Preview GPU load** | Full refresh rate (165 FPS) | **~40 FPS** (throttled) |
+| **Gaming FPS impact** | 20-30 FPS loss reported | **Significantly reduced** |
 
 ## Features
 
-- **AMD-first encoder defaults** -- AMF HEVC is the default encoder. Dropdown order: AMD AV1 > AMD HEVC > AMD H.264 > x264 (fallback)
-- **11 plugins** instead of 36 -- only what you actually need for streaming and recording
-- **AVX2 + AMD64 compiler optimizations** -- built specifically for Zen 3+ processors
-- **D3D11-only rendering** -- the sole graphics backend, matching AMD's best-optimized driver path on Windows
-- **Portable by default** -- settings, scenes, and profiles live next to the executable. No installation required
-- **Close-to-tray** -- clicking X minimizes to system tray (like Steam/AMD Adrenalin). Streaming, recording, and replay buffer keep running in the background
-- **Tray quick controls** -- right-click the tray icon for Start/Stop Stream, Record, Replay Buffer, Save Replay, and Exit
-- **No bloat** -- no Chromium browser source (~200MB RAM saved), no scripting runtime, no WebSocket server, no VLC dependency
+### Core
+- **AMD-first encoder defaults** — AMF HEVC is the default encoder. Dropdown: AMD AV1 > HEVC > H.264 > x264 fallback
+- **11 plugins** instead of 36 — only what you need for streaming and recording
+- **AVX2 + /favor:AMD64 compiler optimizations** — built for Zen 3+ instruction scheduling
+- **D3D11-only rendering** — AMD's best-optimized driver path on Windows
+
+### Gaming-Friendly
+- **Preview throttled to ~40 FPS** — GPU renders preview every 4th frame instead of 165 FPS. Encoder still gets every frame at full quality
+- **Pre-analysis disabled** — eliminates the AMF pre-encode pass that steals GPU cycles from your game
+- **Reduced GPU encode textures** (10 → 6) — frees VRAM for game textures
+- **Reduced async frame cache** (30 → 12) — less memory pressure
+- **No profiler overhead** in the render loop
+
+### UX
+- **Portable by default** — settings, scenes, profiles live next to the executable
+- **Close-to-tray** — X minimizes to system tray (like Steam/AMD Adrenalin). Recording keeps running
+- **Tray controls** — right-click for Stream, Record, Replay Buffer, Save Replay, Exit
+- **Built-in update checker** — Help → Check for Updates fetches from GitHub Releases
+- **About dialog** with MIT + OBS GPLv2 license
+- **Windows installer** with custom branding via Inno Setup
+
+### AMD Encoder Fixes
+
+These fixes address long-standing AMD AMF issues reported across [OBS #12013](https://github.com/obsproject/obs-studio/issues/12013), [OBS #12512](https://github.com/obsproject/obs-studio/issues/12512), [AMF #465](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/issues/465), and [AMF #323](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/issues/323):
+
+| Fix | Problem | Solution |
+|-----|---------|----------|
+| **AV1 filler data bug** | Stock OBS compares AV1 rate control against H.264 enum constants — filler data never activates for AV1 CBR. Causes bitrate drops to 0 on static scenes. | Use correct `AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_CBR` enum |
+| **VBV buffer too large** | Stock OBS sets VBV = 1 full second of bitrate, allowing spikes up to ~2x target before correction | VBV = 500ms (`bitrate / 2`) — cuts maximum spike in half |
+| **Startup encoder overload** | H.264 pre-analysis (`PREENCODE_ENABLE`) consumes first GOP, causing 2-3 second frame drops at stream start | Pre-analysis disabled |
+| **HQCBR filler data** | High Quality CBR mode didn't enable filler data on any codec | Filler data now enabled for both CBR and HQCBR on H.264, HEVC, and AV1 |
 
 ## Target Hardware
 
@@ -43,30 +77,22 @@ The result: faster startup, lower RAM usage, smaller binary, and AMD hardware en
 | **RAM** | 32GB DDR4 |
 | **OS** | Windows 11 Pro |
 
-Any AMD system with a Zen 2+ CPU and RDNA/RDNA 2+ GPU should work. The AVX2 requirement means no pre-Zen CPUs.
+Any AMD system with a Zen 2+ CPU and RDNA+ GPU should work. AVX2 required (all Zen CPUs support this).
 
 ## What's Removed
 
 ### Non-AMD Encoders
-- `obs-nvenc` -- NVIDIA GPU encoder
-- `obs-qsv11` -- Intel Quick Sync Video
-- `nv-filters` -- NVIDIA GPU filters
+- `obs-nvenc` — NVIDIA GPU encoder
+- `obs-qsv11` — Intel Quick Sync Video
+- `nv-filters` — NVIDIA GPU filters
 
 ### Non-Windows Platform Code
-- `libobs-opengl` -- OpenGL rendering (D3D11 is sole backend)
-- All macOS plugins and Metal backend
-- All Linux/BSD plugins and audio backends
+- `libobs-opengl`, `libobs-metal`, all macOS/Linux/BSD plugins
 
 ### Heavyweight Optional Plugins
-- `obs-browser` -- Chromium Embedded Framework (biggest RAM savings)
-- `obs-websocket` -- remote control API
-- `obs-webrtc` -- WebRTC output
-- `vlc-video` -- VLC media source
-- `decklink`, `aja` -- professional capture cards
-- `obs-vst` -- VST audio plugins
-- `text-freetype2` -- redundant text renderer
-- `obs-libfdk` -- FDK AAC encoder
-- Lua/Python scripting runtime
+- `obs-browser` — Chromium (can be re-enabled with `-DENABLE_BROWSER=ON`)
+- `obs-websocket`, `obs-webrtc`, `vlc-video`, `decklink`, `aja`, `obs-vst`, `text-freetype2`, `obs-libfdk`
+- Lua/Python scripting, frontend-tools plugin
 
 ### What Remains (11 core plugins)
 
@@ -87,9 +113,10 @@ Any AMD system with a Zen 2+ CPU and RDNA/RDNA 2+ GPU should work. The AVX2 requ
 ## Building
 
 ### Prerequisites
-- Visual Studio 2022 (Community or BuildTools) with **Desktop development with C++** workload
+- Visual Studio 2022 (Community or BuildTools) with **Desktop development with C++** workload + ATL
 - CMake 3.28+
 - Git
+- Inno Setup 6 (for installer, optional)
 
 ### Quick Build
 ```cmd
@@ -99,24 +126,24 @@ cmake --preset amd-lite-x64
 cmake --build build_amd_lite --config RelWithDebInfo --parallel
 ```
 
-Or just run `build.bat` which handles everything including the Inno Setup installer.
+### With Browser Source
+```cmd
+cmake --preset amd-lite-x64 -DENABLE_BROWSER=ON -DENABLE_WEBSOCKET=ON
+cmake --build build_amd_lite --config RelWithDebInfo --parallel
+```
 
-### Build Output
-The portable app will be at `build_amd_lite/rundir/RelWithDebInfo/`. Run `bin/64bit/obs64.exe` from there.
+### Full Build + Installer
+Run `build.bat` — handles CMake configure, build, and Inno Setup packaging in one step.
 
 ## How It Works
 
-All changes are gated behind the `OBS_AMD_LITE` CMake flag and `#ifdef OBS_AMD_LITE` preprocessor guards. Building without the flag produces stock OBS Studio. This means:
-
-- You can always diff against upstream OBS
-- Cherry-picking upstream updates is straightforward
-- The stock build path is never broken
+All changes are gated behind `OBS_AMD_LITE` CMake flag and `#ifdef OBS_AMD_LITE` preprocessor guards. Building without the flag produces stock OBS Studio.
 
 ## Credits
 
-- [OBS Studio](https://obsproject.com) by the OBS Project -- the foundation this is built on
-- [AMD AMF SDK](https://github.com/GPUOpen-LibrariesAndSDKs/AMF) -- hardware encoding framework
+- [OBS Studio](https://obsproject.com) by the OBS Project
+- [AMD AMF SDK](https://github.com/GPUOpen-LibrariesAndSDKs/AMF)
 
 ## License
 
-Same as OBS Studio -- [GNU General Public License v2.0](COPYING).
+MIT License (GK OBS Lite AMD additions) + [GNU General Public License v2.0](COPYING) (OBS Studio base).

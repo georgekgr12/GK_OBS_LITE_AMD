@@ -3,6 +3,8 @@ target_sources(
   PRIVATE
     window-basic-about.cpp
     window-basic-about.hpp
+    update-lite-amd.cpp
+    update-lite-amd.hpp
     window-basic-adv-audio.cpp
     window-basic-adv-audio.hpp
     window-basic-auto-config-test.cpp

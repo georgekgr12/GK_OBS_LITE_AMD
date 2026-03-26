@@ -3356,7 +3356,11 @@ static void clean_cache(obs_source_t *source)
 	}
 }
 
+#ifdef OBS_AMD_LITE
+#define MAX_ASYNC_FRAMES 12
+#else
 #define MAX_ASYNC_FRAMES 30
+#endif
 //if return value is not null then do (os_atomic_dec_long(&output->refs) == 0) && obs_source_frame_destroy(output)
 static inline struct obs_source_frame *cache_video(struct obs_source *source, const struct obs_source_frame *frame)
 {

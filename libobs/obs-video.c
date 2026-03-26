@@ -1125,9 +1125,23 @@ bool obs_graphics_thread_loop(struct obs_graphics_context *context)
 	output_frames();
 	profile_end(output_frame_name);
 
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Throttle preview rendering to save GPU.
+	 * Output/encoding runs at full frame rate — only display rendering
+	 * is skipped. Renders every 4th frame (~30 FPS at 120, ~15 at 60). */
+	{
+		static uint64_t display_frame_counter = 0;
+		if ((display_frame_counter++ % 4) == 0) {
+			profile_start(render_displays_name);
+			render_displays();
+			profile_end(render_displays_name);
+		}
+	}
+#else
 	profile_start(render_displays_name);
 	render_displays();
 	profile_end(render_displays_name);
+#endif
 	source_profiler_render_end();
 
 	execute_graphics_tasks();

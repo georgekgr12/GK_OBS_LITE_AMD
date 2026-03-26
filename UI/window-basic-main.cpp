@@ -55,6 +55,9 @@
 #include "window-basic-source-select.hpp"
 #include "window-basic-main.hpp"
 #include "window-basic-stats.hpp"
+#ifdef OBS_AMD_LITE
+#include "update-lite-amd.hpp"
+#endif
 #include "window-basic-main-outputs.hpp"
 #include "window-basic-vcam-config.hpp"
 #include "window-log-reply.hpp"
@@ -480,7 +483,11 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	cpuUsageInfo = os_cpu_usage_info_start();
 	cpuUsageTimer = new QTimer(this);
 	connect(cpuUsageTimer.data(), &QTimer::timeout, ui->statusbar, &OBSBasicStatusBar::UpdateCPUUsage);
+#ifdef OBS_AMD_LITE
+	cpuUsageTimer->start(10000);
+#else
 	cpuUsageTimer->start(3000);
+#endif
 
 	diskFullTimer = new QTimer(this);
 	connect(diskFullTimer, &QTimer::timeout, this, &OBSBasic::CheckDiskSpaceRemaining);
@@ -2366,7 +2373,9 @@ void OBSBasic::OBSInit()
 		config_save_safe(App()->GetAppConfig(), "tmp", nullptr);
 	}
 #endif
+#ifndef OBS_AMD_LITE
 	TimedCheckForUpdates();
+#endif
 
 	ToggleMixerLayout(config_get_bool(App()->GetUserConfig(), "BasicWindow", "VerticalVolControl"));
 
@@ -3857,7 +3866,34 @@ void OBSBasic::TimedCheckForUpdates()
 
 void OBSBasic::CheckForUpdates(bool manualUpdate)
 {
-#if _WIN32
+#ifdef OBS_AMD_LITE
+	ui->actionCheckForUpdates->setEnabled(false);
+
+	GKUpdateThread *gkThread = new GKUpdateThread(manualUpdate, this);
+
+	connect(gkThread, &GKUpdateThread::UpdateAvailable, this,
+		[this](const QString &version, const QString &url, const QString &notes) {
+			ui->actionCheckForUpdates->setEnabled(true);
+			GKUpdateDialog *dlg = new GKUpdateDialog(this, version, url, notes);
+			dlg->setAttribute(Qt::WA_DeleteOnClose, true);
+			dlg->exec();
+		});
+
+	connect(gkThread, &GKUpdateThread::NoUpdate, this, [this](bool manual) {
+		ui->actionCheckForUpdates->setEnabled(true);
+		if (manual)
+			QMessageBox::information(this, "GK_OBS_Lite_AMD",
+						 "You are running the latest version (" GK_OBS_LITE_VERSION ").");
+	});
+
+	connect(gkThread, &GKUpdateThread::UpdateError, this, [this](const QString &error) {
+		ui->actionCheckForUpdates->setEnabled(true);
+		QMessageBox::warning(this, "Update Check Failed", error);
+	});
+
+	connect(gkThread, &QThread::finished, gkThread, &QObject::deleteLater);
+	gkThread->start();
+#elif _WIN32
 	ui->actionCheckForUpdates->setEnabled(false);
 	ui->actionRepair->setEnabled(false);
 
@@ -8687,6 +8723,9 @@ void OBSBasic::UpdateTitleBar()
 	const char *profile = config_get_string(App()->GetUserConfig(), "Basic", "Profile");
 	const char *sceneCollection = config_get_string(App()->GetUserConfig(), "Basic", "SceneCollection");
 
+#ifdef OBS_AMD_LITE
+	name << "GK_OBS_Lite_AMD 0.5.0";
+#else
 	name << "OBS ";
 	if (previewProgramMode)
 		name << "Studio ";
@@ -8696,6 +8735,7 @@ void OBSBasic::UpdateTitleBar()
 		name << " (" << Str("TitleBar.SafeMode") << ")";
 	if (App()->IsPortableMode())
 		name << " - " << Str("TitleBar.PortableMode");
+#endif
 
 	name << " - " << Str("TitleBar.Profile") << ": " << profile;
 	name << " - " << Str("TitleBar.Scenes") << ": " << sceneCollection;
@@ -9575,10 +9615,15 @@ void OBSBasic::on_actionShowAbout_triggered()
 	if (about)
 		about->close();
 
+#ifdef OBS_AMD_LITE
+	GKAboutDialog *gkAbout = new GKAboutDialog(this);
+	gkAbout->setAttribute(Qt::WA_DeleteOnClose, true);
+	gkAbout->show();
+#else
 	about = new OBSAbout(this);
 	about->show();
-
 	about->setAttribute(Qt::WA_DeleteOnClose, true);
+#endif
 }
 
 void OBSBasic::ResizeOutputSizeOfSource()

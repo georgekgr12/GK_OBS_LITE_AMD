@@ -75,7 +75,11 @@ void OBSBasicStatusBar::Activate()
 		startSkippedFrameCount = skipped;
 		startTotalFrameCount = total;
 
+#ifdef OBS_AMD_LITE
+		refreshTimer->start(3000);
+#else
 		refreshTimer->start(1000);
+#endif
 		active = true;
 
 		if (streamOutput) {

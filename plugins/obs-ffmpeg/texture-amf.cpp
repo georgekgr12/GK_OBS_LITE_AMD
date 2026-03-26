@@ -1244,9 +1244,14 @@ static void amf_avc_update_data(amf_base *enc, int rc, int64_t bitrate, int64_t 
 	    rc != AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_QUALITY_VBR) {
 		set_avc_property(enc, TARGET_BITRATE, bitrate);
 		set_avc_property(enc, PEAK_BITRATE, bitrate);
+#ifdef OBS_AMD_LITE
+		set_avc_property(enc, VBV_BUFFER_SIZE, bitrate / 2);
+#else
 		set_avc_property(enc, VBV_BUFFER_SIZE, bitrate);
+#endif
 
-		if (rc == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CBR) {
+		if (rc == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CBR ||
+		    rc == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_HIGH_QUALITY_CBR) {
 			set_avc_property(enc, FILLER_DATA_ENABLE, true);
 		}
 	} else {
@@ -1399,7 +1404,15 @@ static void amf_avc_create_internal(amf_base *enc, obs_data_t *settings)
 	set_avc_property(enc, PROFILE, get_avc_profile(settings));
 	set_avc_property(enc, LOWLATENCY_MODE, false);
 	set_avc_property(enc, CABAC_ENABLE, AMF_VIDEO_ENCODER_UNDEFINED);
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Disable pre-analysis to prevent encoder overload
+	 * during the first 2-3 seconds of a stream. AMF consumes the first GOP
+	 * for analysis, causing massive frame drops at stream start.
+	 * See: https://github.com/GPUOpen-LibrariesAndSDKs/AMF/issues/323 */
+	set_avc_property(enc, PREENCODE_ENABLE, false);
+#else
 	set_avc_property(enc, PREENCODE_ENABLE, true);
+#endif
 	set_avc_property(enc, OUTPUT_COLOR_PROFILE, enc->amf_color_profile);
 	set_avc_property(enc, OUTPUT_TRANSFER_CHARACTERISTIC, enc->amf_characteristic);
 	set_avc_property(enc, OUTPUT_COLOR_PRIMARIES, enc->amf_primaries);
@@ -1569,9 +1582,14 @@ static void amf_hevc_update_data(amf_base *enc, int rc, int64_t bitrate, int64_t
 	    rc != AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_QUALITY_VBR) {
 		set_hevc_property(enc, TARGET_BITRATE, bitrate);
 		set_hevc_property(enc, PEAK_BITRATE, bitrate);
+#ifdef OBS_AMD_LITE
+		set_hevc_property(enc, VBV_BUFFER_SIZE, bitrate / 2);
+#else
 		set_hevc_property(enc, VBV_BUFFER_SIZE, bitrate);
+#endif
 
-		if (rc == AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_CBR) {
+		if (rc == AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_CBR ||
+		    rc == AMF_VIDEO_ENCODER_HEVC_RATE_CONTROL_METHOD_HIGH_QUALITY_CBR) {
 			set_hevc_property(enc, FILLER_DATA_ENABLE, true);
 		}
 	} else {
@@ -1911,11 +1929,23 @@ static void amf_av1_update_data(amf_base *enc, int rc, int64_t bitrate, int64_t 
 	    rc != AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_QUALITY_VBR) {
 		set_av1_property(enc, TARGET_BITRATE, bitrate);
 		set_av1_property(enc, PEAK_BITRATE, bitrate);
+#ifdef OBS_AMD_LITE
+		/* OBS Lite AMD Edition: Tighter VBV buffer (500ms instead of 1s)
+		 * to reduce bitrate spikes. AMF wiki recommends 0.1-0.5s for streaming. */
+		set_av1_property(enc, VBV_BUFFER_SIZE, bitrate / 2);
+#else
 		set_av1_property(enc, VBV_BUFFER_SIZE, bitrate);
+#endif
 
-		if (rc == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CBR) {
+		/* FIX: Use AV1-specific enum constants (not AVC).
+		 * Stock OBS 31.0.3 compares against AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_CBR
+		 * (H.264 enum) but rc is AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_CBR.
+		 * If the enum values differ, filler data is never enabled for AV1 CBR,
+		 * causing bitrate drops to 0 on static scenes. */
+		if (rc == AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_CBR ||
+		    rc == AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_HIGH_QUALITY_CBR) {
 			set_av1_property(enc, FILLER_DATA, true);
-		} else if (rc == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR ||
+		} else if (rc == AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_PEAK_CONSTRAINED_VBR ||
 			   rc == AMF_VIDEO_ENCODER_AV1_RATE_CONTROL_METHOD_HIGH_QUALITY_VBR) {
 			set_av1_property(enc, PEAK_BITRATE, bitrate * 1.5);
 		}

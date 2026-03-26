@@ -1903,7 +1903,9 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 
 	std::unique_ptr<void, decltype(ProfilerFree)> prof_release(static_cast<void *>(&ProfilerFree), ProfilerFree);
 
+#ifndef OBS_AMD_LITE
 	profiler_start();
+#endif
 	profile_register_root(run_program_init, 0);
 
 	ScopeProfiler prof{run_program_init};
