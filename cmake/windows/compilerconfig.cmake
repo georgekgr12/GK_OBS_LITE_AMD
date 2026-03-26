@@ -59,6 +59,13 @@ endif()
 set(_obs_msvc_c_options /MP /Zc:__cplusplus /Zc:preprocessor)
 set(_obs_msvc_cpp_options /MP /Zc:__cplusplus /Zc:preprocessor)
 
+# OBS Lite AMD Edition: Zen 3 (5700X3D) + RDNA 4 (9070 XT) optimizations
+if(OBS_AMD_LITE)
+  list(APPEND _obs_msvc_c_options /arch:AVX2 /favor:AMD64)
+  list(APPEND _obs_msvc_cpp_options /arch:AVX2 /favor:AMD64)
+  message(STATUS "OBS Lite: AMD Zen 3 optimizations enabled (/arch:AVX2 /favor:AMD64)")
+endif()
+
 if(CMAKE_CXX_STANDARD GREATER_EQUAL 20)
   list(APPEND _obs_msvc_cpp_options /Zc:char8_t-)
 endif()
@@ -84,6 +91,7 @@ add_compile_definitions(
   _CRT_NONSTDC_NO_WARNINGS
   $<$<CONFIG:DEBUG>:DEBUG>
   $<$<CONFIG:DEBUG>:_DEBUG>
+  $<$<BOOL:${OBS_AMD_LITE}>:OBS_AMD_LITE>
 )
 
 add_link_options(

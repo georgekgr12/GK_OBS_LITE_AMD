@@ -1863,12 +1863,26 @@ extern bool EncoderAvailable(const char *encoder);
 void OBSBasic::InitBasicConfigDefaults2()
 {
 	bool oldEncDefaults = config_get_bool(App()->GetUserConfig(), "General", "Pre23Defaults");
-	bool useNV = EncoderAvailable("ffmpeg_nvenc") && !oldEncDefaults;
 
+#ifdef OBS_AMD_LITE
+	const char *defaultEnc = SIMPLE_ENCODER_X264;
+	if (!oldEncDefaults) {
+		if (EncoderAvailable("h265_texture_amf"))
+			defaultEnc = SIMPLE_ENCODER_AMD_HEVC;
+		else if (EncoderAvailable("h264_texture_amf"))
+			defaultEnc = SIMPLE_ENCODER_AMD;
+		else if (EncoderAvailable("ffmpeg_nvenc"))
+			defaultEnc = SIMPLE_ENCODER_NVENC;
+	}
+	config_set_default_string(activeConfiguration, "SimpleOutput", "StreamEncoder", defaultEnc);
+	config_set_default_string(activeConfiguration, "SimpleOutput", "RecEncoder", defaultEnc);
+#else
+	bool useNV = EncoderAvailable("ffmpeg_nvenc") && !oldEncDefaults;
 	config_set_default_string(activeConfiguration, "SimpleOutput", "StreamEncoder",
 				  useNV ? SIMPLE_ENCODER_NVENC : SIMPLE_ENCODER_X264);
 	config_set_default_string(activeConfiguration, "SimpleOutput", "RecEncoder",
 				  useNV ? SIMPLE_ENCODER_NVENC : SIMPLE_ENCODER_X264);
+#endif
 
 	const char *aac_default = "ffmpeg_aac";
 	if (EncoderAvailable("CoreAudio_AAC"))
@@ -4802,6 +4816,21 @@ void OBSBasic::closeEvent(QCloseEvent *event)
 		config_set_string(App()->GetUserConfig(), "BasicWindow", "geometry",
 				  saveGeometry().toBase64().constData());
 
+#ifdef OBS_AMD_LITE
+	if (!forceClose && trayIcon && trayIcon->isVisible() && sysTrayCloseToTray()) {
+		event->ignore();
+		hide();
+		if (previewEnabled)
+			EnablePreviewDisplay(false);
+		if (showHide)
+			showHide->setText(QTStr("Basic.SystemTray.Show"));
+		trayIcon->showMessage("OBS Lite AMD Edition",
+				      QTStr("Basic.SystemTray.ClosedToTray"),
+				      QSystemTrayIcon::Information, 3000);
+		return;
+	}
+#endif
+
 	bool confirmOnExit = config_get_bool(App()->GetUserConfig(), "General", "ConfirmOnExit");
 
 	if (confirmOnExit && outputHandler && outputHandler->Active() && !clearingFailed) {
@@ -7260,6 +7289,10 @@ void OBSBasic::ReplayBufferStart()
 
 	if (sysTrayReplayBuffer)
 		sysTrayReplayBuffer->setText(QTStr("Basic.Main.StopReplayBuffer"));
+#ifdef OBS_AMD_LITE
+	if (sysTrayReplayBufferSave)
+		sysTrayReplayBufferSave->setEnabled(true);
+#endif
 
 	replayBufferStopping = false;
 	OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
@@ -7312,6 +7345,10 @@ void OBSBasic::ReplayBufferStop(int code)
 
 	if (sysTrayReplayBuffer)
 		sysTrayReplayBuffer->setText(QTStr("Basic.Main.StartReplayBuffer"));
+#ifdef OBS_AMD_LITE
+	if (sysTrayReplayBufferSave)
+		sysTrayReplayBufferSave->setEnabled(false);
+#endif
 
 	blog(LOG_INFO, REPLAY_BUFFER_STOP);
 
@@ -9023,7 +9060,11 @@ void OBSBasic::SystemTrayInit()
 	QIcon trayIconFile = QIcon(":/res/images/obs.png");
 #endif
 	trayIcon.reset(new QSystemTrayIcon(QIcon::fromTheme("obs-tray", trayIconFile), this));
+#ifdef OBS_AMD_LITE
+	trayIcon->setToolTip("OBS Lite AMD Edition");
+#else
 	trayIcon->setToolTip("OBS Studio");
+#endif
 
 	showHide = new QAction(QTStr("Basic.SystemTray.Show"), trayIcon.data());
 	sysTrayStream =
@@ -9045,6 +9086,20 @@ void OBSBasic::SystemTrayInit()
 	studioProgramProjector = new QMenu(QTStr("StudioProgramProjector"));
 	AddProjectorMenuMonitors(previewProjector, this, &OBSBasic::OpenPreviewProjector);
 	AddProjectorMenuMonitors(studioProgramProjector, this, &OBSBasic::OpenStudioProgramProjector);
+#ifdef OBS_AMD_LITE
+	sysTrayReplayBufferSave = new QAction(QTStr("Basic.Main.SaveReplay"), trayIcon.data());
+	sysTrayReplayBufferSave->setEnabled(false);
+
+	trayMenu->addAction(showHide);
+	trayMenu->addSeparator();
+	trayMenu->addAction(sysTrayStream);
+	trayMenu->addAction(sysTrayRecord);
+	trayMenu->addSeparator();
+	trayMenu->addAction(sysTrayReplayBuffer);
+	trayMenu->addAction(sysTrayReplayBufferSave);
+	trayMenu->addSeparator();
+	trayMenu->addAction(exit);
+#else
 	trayMenu->addAction(showHide);
 	trayMenu->addSeparator();
 	trayMenu->addMenu(previewProjector);
@@ -9056,11 +9111,16 @@ void OBSBasic::SystemTrayInit()
 	trayMenu->addAction(sysTrayVirtualCam);
 	trayMenu->addSeparator();
 	trayMenu->addAction(exit);
+#endif
 	trayIcon->setContextMenu(trayMenu);
 	trayIcon->show();
 
-	if (outputHandler && !outputHandler->replayBuffer)
+	if (outputHandler && !outputHandler->replayBuffer) {
 		sysTrayReplayBuffer->setEnabled(false);
+#ifdef OBS_AMD_LITE
+		sysTrayReplayBufferSave->setEnabled(false);
+#endif
+	}
 
 	sysTrayVirtualCam->setEnabled(vcamEnabled);
 
@@ -9073,7 +9133,12 @@ void OBSBasic::SystemTrayInit()
 	connect(sysTrayRecord, &QAction::triggered, this, &OBSBasic::RecordActionTriggered);
 	connect(sysTrayReplayBuffer.data(), &QAction::triggered, this, &OBSBasic::ReplayBufferActionTriggered);
 	connect(sysTrayVirtualCam.data(), &QAction::triggered, this, &OBSBasic::VirtualCamActionTriggered);
+#ifdef OBS_AMD_LITE
+	connect(sysTrayReplayBufferSave.data(), &QAction::triggered, this, &OBSBasic::ReplayBufferSave);
+	connect(exit, &QAction::triggered, this, &OBSBasic::ForceClose);
+#else
 	connect(exit, &QAction::triggered, this, &OBSBasic::close);
+#endif
 }
 
 void OBSBasic::IconActivated(QSystemTrayIcon::ActivationReason reason)
@@ -9138,6 +9203,19 @@ bool OBSBasic::sysTrayMinimizeToTray()
 {
 	return config_get_bool(App()->GetUserConfig(), "BasicWindow", "SysTrayMinimizeToTray");
 }
+
+#ifdef OBS_AMD_LITE
+bool OBSBasic::sysTrayCloseToTray()
+{
+	return config_get_bool(App()->GetUserConfig(), "BasicWindow", "SysTrayCloseToTray");
+}
+
+void OBSBasic::ForceClose()
+{
+	forceClose = true;
+	close();
+}
+#endif
 
 void OBSBasic::on_actionMainUndo_triggered()
 {

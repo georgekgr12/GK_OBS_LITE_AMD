@@ -1,6 +1,19 @@
 # Exclude everything
 /*
 
+# OBS Lite AMD Edition extras
+!/build.bat
+!/installer.iss
+!/installer_assets
+!/Logo.png
+!/Logo-removebg-preview.png
+!/CLAUDE.md
+
+# Downloaded deps and build output (large, not committed)
+.deps/
+build_*/
+dist-installer/
+
 # Except for default project files
 !/.github
 !/build-aux

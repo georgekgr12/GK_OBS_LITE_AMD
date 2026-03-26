@@ -1488,7 +1488,11 @@ static QString get_simple_fallback(const QString &enc)
 		return SIMPLE_ENCODER_APPLE_H264;
 	if (enc == SIMPLE_ENCODER_QSV_AV1)
 		return SIMPLE_ENCODER_QSV;
+#ifdef OBS_AMD_LITE
+	return SIMPLE_ENCODER_AMD;
+#else
 	return SIMPLE_ENCODER_X264;
+#endif
 }
 
 bool OBSBasicSettings::ServiceSupportsCodecCheck()
@@ -1663,6 +1667,17 @@ void OBSBasicSettings::ResetEncoders(bool streamOnly)
 
 #define ENCODER_STR(str) QTStr("Basic.Settings.Output.Simple.Encoder." str)
 
+#ifdef OBS_AMD_LITE
+	if (service_supports_encoder(vcodecs, "av1_texture_amf"))
+		ui->simpleOutStrEncoder->addItem(ENCODER_STR("Hardware.AMD.AV1"), QString(SIMPLE_ENCODER_AMD_AV1));
+#ifdef ENABLE_HEVC
+	if (service_supports_encoder(vcodecs, "h265_texture_amf"))
+		ui->simpleOutStrEncoder->addItem(ENCODER_STR("Hardware.AMD.HEVC"), QString(SIMPLE_ENCODER_AMD_HEVC));
+#endif
+	if (service_supports_encoder(vcodecs, "h264_texture_amf"))
+		ui->simpleOutStrEncoder->addItem(ENCODER_STR("Hardware.AMD.H264"), QString(SIMPLE_ENCODER_AMD));
+	ui->simpleOutStrEncoder->addItem(ENCODER_STR("Software"), QString(SIMPLE_ENCODER_X264));
+#else
 	ui->simpleOutStrEncoder->addItem(ENCODER_STR("Software"), QString(SIMPLE_ENCODER_X264));
 #ifdef _WIN32
 	if (service_supports_encoder(vcodecs, "obs_qsv11"))
@@ -1685,6 +1700,7 @@ void OBSBasicSettings::ResetEncoders(bool streamOnly)
 		ui->simpleOutStrEncoder->addItem(ENCODER_STR("Hardware.AMD.H264"), QString(SIMPLE_ENCODER_AMD));
 	if (service_supports_encoder(vcodecs, "av1_texture_amf"))
 		ui->simpleOutStrEncoder->addItem(ENCODER_STR("Hardware.AMD.AV1"), QString(SIMPLE_ENCODER_AMD_AV1));
+#endif /* OBS_AMD_LITE */
 /* Preprocessor guard required for the macOS version check */
 #ifdef __APPLE__
 	if (service_supports_encoder(vcodecs, "com.apple.videotoolbox.videoencoder.ave.avc")

@@ -914,6 +914,11 @@ void AutoConfigTestPage::TestStreamEncoderThread()
 	}
 
 	if (!softwareTested) {
+#ifdef OBS_AMD_LITE
+		if (wiz->vceAvailable)
+			wiz->streamingEncoder = AutoConfig::Encoder::AMD;
+		else
+#endif
 		if (wiz->nvencAvailable)
 			wiz->streamingEncoder = AutoConfig::Encoder::NVENC;
 		else if (wiz->qsvAvailable)
@@ -958,6 +963,11 @@ void AutoConfigTestPage::TestRecordingEncoderThread()
 	bool recordingOnly = wiz->type == AutoConfig::Type::Recording;
 
 	if (wiz->hardwareEncodingAvailable) {
+#ifdef OBS_AMD_LITE
+		if (wiz->vceAvailable)
+			wiz->recordingEncoder = AutoConfig::Encoder::AMD;
+		else
+#endif
 		if (wiz->nvencAvailable)
 			wiz->recordingEncoder = AutoConfig::Encoder::NVENC;
 		else if (wiz->qsvAvailable)
@@ -970,7 +980,8 @@ void AutoConfigTestPage::TestRecordingEncoderThread()
 		wiz->recordingEncoder = AutoConfig::Encoder::x264;
 	}
 
-	if (wiz->recordingEncoder != AutoConfig::Encoder::NVENC) {
+	if (wiz->recordingEncoder != AutoConfig::Encoder::NVENC &&
+	    wiz->recordingEncoder != AutoConfig::Encoder::AMD) {
 		if (!recordingOnly) {
 			wiz->recordingEncoder = AutoConfig::Encoder::Stream;
 			wiz->recordingQuality = AutoConfig::Quality::Stream;

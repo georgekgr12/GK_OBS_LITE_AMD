@@ -89,7 +89,11 @@ static string currentLogFile;
 static string lastLogFile;
 static string lastCrashLogFile;
 
+#ifdef OBS_AMD_LITE
+bool portable_mode = true;
+#else
 bool portable_mode = false;
+#endif
 bool steam = false;
 bool safe_mode = false;
 bool disable_3p_plugins = false;
@@ -106,7 +110,11 @@ bool opt_start_virtualcam = false;
 bool opt_minimize_tray = false;
 bool opt_allow_opengl = false;
 bool opt_always_on_top = false;
+#ifdef OBS_AMD_LITE
+bool opt_disable_updater = true;
+#else
 bool opt_disable_updater = false;
+#endif
 bool opt_disable_missing_files_check = false;
 string opt_starting_collection;
 string opt_starting_profile;
@@ -488,7 +496,13 @@ void OBSApp::InitUserConfigDefaults()
 	config_set_default_bool(userConfig, "BasicWindow", "RecordWhenStreaming", false);
 	config_set_default_bool(userConfig, "BasicWindow", "KeepRecordingWhenStreamStops", false);
 	config_set_default_bool(userConfig, "BasicWindow", "SysTrayEnabled", true);
+#ifdef OBS_AMD_LITE
 	config_set_default_bool(userConfig, "BasicWindow", "SysTrayWhenStarted", false);
+	config_set_default_bool(userConfig, "BasicWindow", "SysTrayCloseToTray", true);
+	config_set_default_bool(userConfig, "BasicWindow", "SysTrayMinimizeToTray", true);
+#else
+	config_set_default_bool(userConfig, "BasicWindow", "SysTrayWhenStarted", false);
+#endif
 	config_set_default_bool(userConfig, "BasicWindow", "SaveProjectors", false);
 	config_set_default_bool(userConfig, "BasicWindow", "ShowTransitions", true);
 	config_set_default_bool(userConfig, "BasicWindow", "ShowListboxToolbars", true);

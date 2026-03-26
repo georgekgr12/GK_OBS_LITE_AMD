@@ -1051,7 +1051,7 @@ AutoConfig::AutoConfig(QWidget *parent) : QWizard(parent)
 		/* Newer generations of NVENC have a high enough quality to
 		 * bitrate ratio that if NVENC is available, it makes sense to
 		 * just always prefer hardware encoding by default */
-		bool preferHardware = nvencAvailable || appleAvailable || os_get_physical_cores() <= 4;
+		bool preferHardware = nvencAvailable || appleAvailable || vceAvailable || os_get_physical_cores() <= 4;
 		streamPage->ui->preferHardware->setChecked(preferHardware);
 	}
 
@@ -1141,11 +1141,19 @@ inline const char *AutoConfig::GetEncoderId(Encoder enc)
 	case Encoder::QSV:
 		return SIMPLE_ENCODER_QSV;
 	case Encoder::AMD:
+#ifdef OBS_AMD_LITE
+		return SIMPLE_ENCODER_AMD_HEVC;
+#else
 		return SIMPLE_ENCODER_AMD;
+#endif
 	case Encoder::Apple:
 		return SIMPLE_ENCODER_APPLE_H264;
 	default:
+#ifdef OBS_AMD_LITE
+		return SIMPLE_ENCODER_AMD;
+#else
 		return SIMPLE_ENCODER_X264;
+#endif
 	}
 };
 

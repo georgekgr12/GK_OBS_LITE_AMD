@@ -539,6 +539,12 @@ private:
 	void dropEvent(QDropEvent *event) override;
 
 	bool sysTrayMinimizeToTray();
+#ifdef OBS_AMD_LITE
+	bool forceClose = false;
+	bool sysTrayCloseToTray();
+	void ForceClose();
+	QPointer<QAction> sysTrayReplayBufferSave;
+#endif
 
 	void EnumDialogs();
 

@@ -16,18 +16,25 @@ include(defaults)
 include(helpers)
 
 option(ENABLE_UI "Enable building with UI (requires Qt)" ON)
-option(ENABLE_SCRIPTING "Enable scripting support" ON)
+option(ENABLE_SCRIPTING "Enable scripting support" OFF)
 option(ENABLE_HEVC "Enable HEVC encoders" ON)
+option(OBS_AMD_LITE "Build OBS Lite AMD Edition (AMD-only, minimal footprint)" OFF)
 
 add_subdirectory(libobs)
 if(OS_WINDOWS)
   add_subdirectory(libobs-d3d11)
   add_subdirectory(libobs-winrt)
 endif()
-add_subdirectory(libobs-opengl)
+
+if(NOT OBS_AMD_LITE)
+  add_subdirectory(libobs-opengl)
+endif()
+
 add_subdirectory(plugins)
 
-add_subdirectory(test/test-input)
+if(NOT OBS_AMD_LITE)
+  add_subdirectory(test/test-input)
+endif()
 
 add_subdirectory(UI)
 
