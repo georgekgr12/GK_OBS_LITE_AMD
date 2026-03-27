@@ -542,8 +542,10 @@ private:
 #ifdef OBS_AMD_LITE
 	bool forceClose = false;
 	bool sysTrayCloseToTray();
-	void ForceClose();
 	QPointer<QAction> sysTrayReplayBufferSave;
+public:
+	void ForceClose();
+private:
 #endif
 
 	void EnumDialogs();

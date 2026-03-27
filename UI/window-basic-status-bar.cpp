@@ -227,12 +227,29 @@ void OBSBasicStatusBar::UpdateCPUUsage()
 	text += QString("CPU: ") + QString::number(main->GetCPUUsage(), 'f', 1) + QString("%");
 
 #ifdef OBS_AMD_LITE
-	/* OBS Lite AMD Edition: Append GPU VRAM usage to CPU line */
-	AMDGPUStats gpuStats = QueryAMDGPUStats();
-	if (gpuStats.valid) {
-		text += QString("  |  VRAM: %1/%2 GB")
-				.arg(gpuStats.vramUsedMB / 1024.0, 0, 'f', 1)
-				.arg(gpuStats.vramTotalMB / 1024.0, 0, 'f', 1);
+	/* OBS Lite AMD Edition: Show GPU name + VRAM usage */
+	{
+		static AMDGPUInfo cachedGpu;
+		static bool gpuDetected = false;
+		if (!gpuDetected) {
+			cachedGpu = DetectAMDGPU();
+			gpuDetected = true;
+		}
+		AMDGPUStats gpuStats = QueryAMDGPUStats();
+		if (gpuStats.valid && cachedGpu.detected) {
+			/* Shorten name: "AMD Radeon RX 9070 XT" → "RX 9070 XT" */
+			QString gpuName = cachedGpu.name;
+			gpuName.replace("AMD Radeon ", "");
+			gpuName.replace("AMD ", "");
+			text += QString("  |  %1  VRAM: %2/%3 GB")
+					.arg(gpuName)
+					.arg(gpuStats.vramUsedMB / 1024.0, 0, 'f', 1)
+					.arg(gpuStats.vramTotalMB / 1024.0, 0, 'f', 1);
+		} else if (gpuStats.valid) {
+			text += QString("  |  VRAM: %1/%2 GB")
+					.arg(gpuStats.vramUsedMB / 1024.0, 0, 'f', 1)
+					.arg(gpuStats.vramTotalMB / 1024.0, 0, 'f', 1);
+		}
 	}
 #endif
 

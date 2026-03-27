@@ -1,6 +1,7 @@
 #ifdef OBS_AMD_LITE
 
 #include "update-lite-amd.hpp"
+#include "window-basic-main.hpp"
 #include <obs-app.hpp>
 #include <qt-wrappers.hpp>
 #include <util/platform.h>
@@ -341,12 +342,43 @@ void GKUpdateDialog::OnDownloadFinished()
 {
 	progressBar->setValue(100);
 	statusLabel->setText("Download complete. Launching installer...");
+	updateButton->setEnabled(false);
+	cancelButton->setEnabled(false);
 
-	/* Short delay to let UI update, then launch installer and quit */
+	/* Launch installer after a short delay, then exit OBS cleanly.
+	 * We use a PowerShell helper script (like MyLocalBackup) that:
+	 * 1. Waits for OBS to fully exit
+	 * 2. Then launches the installer
+	 * This avoids the crash from QApplication::quit() racing with
+	 * audio/video thread shutdown. */
 	QTimer::singleShot(500, this, [this]() {
-		QProcess::startDetached(installerPath, QStringList());
-		/* Give the installer a moment to start before we exit */
-		QTimer::singleShot(1000, qApp, &QApplication::quit);
+		/* Create a helper script that waits for us to exit, then runs installer */
+		QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+		QString scriptPath = tempDir + "/gk_obs_update.bat";
+		QFile script(scriptPath);
+		if (script.open(QIODevice::WriteOnly | QIODevice::Text)) {
+			QString bat = QString(
+				"@echo off\r\n"
+				"timeout /t 3 /nobreak >nul\r\n"
+				"start \"\" \"%1\"\r\n"
+				"del \"%2\"\r\n"
+			).arg(installerPath.replace("/", "\\"), scriptPath.replace("/", "\\"));
+			script.write(bat.toUtf8());
+			script.close();
+
+			QProcess::startDetached("cmd.exe", QStringList() << "/c" << scriptPath);
+		} else {
+			/* Fallback: launch installer directly */
+			QProcess::startDetached(installerPath, QStringList());
+		}
+
+		/* Close OBS properly — use the main window's close path */
+		OBSBasic *main = OBSBasic::Get();
+		if (main) {
+			main->ForceClose();
+		} else {
+			QApplication::quit();
+		}
 	});
 }
 
