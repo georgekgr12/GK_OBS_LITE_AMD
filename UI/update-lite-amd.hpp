@@ -17,7 +17,7 @@
  * runs it, and restarts the app.
  * ============================================================ */
 
-#define GK_OBS_LITE_VERSION "0.5.2"
+#define GK_OBS_LITE_VERSION "0.5.3"
 #define GK_OBS_LITE_RELEASES_REPO "georgekgr12/GK_OBS_LITE_AMD_RELEASES"
 #define GK_OBS_LITE_RELEASES_API "https://api.github.com/repos/" GK_OBS_LITE_RELEASES_REPO "/releases/latest"
 
@@ -49,12 +49,13 @@ class GKUpdateDialog : public QDialog {
 public:
 	GKUpdateDialog(QWidget *parent, const QString &version, const QString &downloadUrl,
 		       const QString &releaseNotes);
+	~GKUpdateDialog();
 
-private slots:
+public slots:
 	void StartDownload();
-	void OnDownloadProgress(qint64 received, qint64 total);
 	void OnDownloadFinished();
 	void OnDownloadError(const QString &error);
+	void OnDownloadProgress(int percent, double downloadedMB, double totalMB);
 
 private:
 	QString version;
@@ -64,6 +65,8 @@ private:
 	QProgressBar *progressBar;
 	QPushButton *updateButton;
 	QPushButton *cancelButton;
+	QThread *dlThread = nullptr;
+	volatile bool cancelRequested = false;
 };
 
 /* --- About / EULA Dialog --- */

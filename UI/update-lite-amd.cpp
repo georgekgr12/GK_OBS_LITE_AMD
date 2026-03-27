@@ -17,6 +17,8 @@
 #include <QDialogButtonBox>
 #include <QScrollArea>
 #include <QApplication>
+#include <QTimer>
+#include <QFileInfo>
 
 #include <json11.hpp>
 #include "remote-text.hpp"
@@ -180,11 +182,52 @@ GKUpdateDialog::GKUpdateDialog(QWidget *parent, const QString &ver, const QStrin
 	}
 }
 
-/* Curl write callback — writes to a QFile */
+GKUpdateDialog::~GKUpdateDialog()
+{
+	/* Signal any running download thread to stop */
+	cancelRequested = true;
+	if (dlThread && dlThread->isRunning()) {
+		dlThread->wait(5000);
+	}
+}
+
+/* Curl write callback — writes to QFile, checks cancel flag */
+struct GKDownloadContext {
+	QFile *file;
+	volatile bool *cancel;
+};
+
 static size_t curl_file_write(void *ptr, size_t size, size_t nmemb, void *data)
 {
-	QFile *file = static_cast<QFile *>(data);
-	return file->write(static_cast<const char *>(ptr), size * nmemb);
+	auto *ctx = static_cast<GKDownloadContext *>(data);
+	if (*ctx->cancel)
+		return 0; /* Returning 0 aborts the transfer */
+	return ctx->file->write(static_cast<const char *>(ptr), size * nmemb);
+}
+
+/* Curl progress callback — reports progress to UI thread */
+struct GKProgressContext {
+	GKUpdateDialog *dialog;
+	volatile bool *cancel;
+};
+
+static int curl_progress_cb(void *data, curl_off_t dltotal, curl_off_t dlnow,
+			    curl_off_t /*ultotal*/, curl_off_t /*ulnow*/)
+{
+	auto *ctx = static_cast<GKProgressContext *>(data);
+	if (*ctx->cancel)
+		return 1; /* Non-zero aborts transfer */
+	if (dltotal > 0) {
+		int percent = (int)((dlnow * 100) / dltotal);
+		double dlMB = dlnow / 1048576.0;
+		double totalMB = dltotal / 1048576.0;
+		QMetaObject::invokeMethod(ctx->dialog, "OnDownloadProgress",
+					  Qt::QueuedConnection,
+					  Q_ARG(int, percent),
+					  Q_ARG(double, dlMB),
+					  Q_ARG(double, totalMB));
+	}
+	return 0;
 }
 
 void GKUpdateDialog::StartDownload()
@@ -192,25 +235,35 @@ void GKUpdateDialog::StartDownload()
 	updateButton->setEnabled(false);
 	cancelButton->setText("Cancel");
 	progressBar->setVisible(true);
+	progressBar->setValue(0);
 	statusLabel->setText("Downloading...");
+	cancelRequested = false;
 
-	/* Download to temp directory */
+	/* Connect cancel button to set cancel flag */
+	disconnect(cancelButton, nullptr, nullptr, nullptr);
+	connect(cancelButton, &QPushButton::clicked, this, [this]() {
+		cancelRequested = true;
+		statusLabel->setText("Cancelling...");
+		cancelButton->setEnabled(false);
+	});
+
+	/* Clean up any previous download */
 	QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
 	QString filename = QUrl(downloadUrl).fileName();
 	if (filename.isEmpty())
 		filename = "GK_OBS_Lite_AMD_Setup.exe";
 	installerPath = tempDir + "/" + filename;
+	QFile::remove(installerPath);
 
-	/* Use a thread so UI stays responsive */
 	QString url = downloadUrl;
 	QString path = installerPath;
 
-	QThread *dlThread = QThread::create([this, url, path]() {
+	dlThread = QThread::create([this, url, path]() {
 		QFile file(path);
 		if (!file.open(QIODevice::WriteOnly)) {
 			QMetaObject::invokeMethod(this, "OnDownloadError",
 						  Qt::QueuedConnection,
-						  Q_ARG(QString, "Failed to open file for writing."));
+						  Q_ARG(QString, QString("Cannot write to %1").arg(path)));
 			return;
 		}
 
@@ -220,62 +273,81 @@ void GKUpdateDialog::StartDownload()
 			file.remove();
 			QMetaObject::invokeMethod(this, "OnDownloadError",
 						  Qt::QueuedConnection,
-						  Q_ARG(QString, "Failed to initialize downloader."));
+						  Q_ARG(QString, QString("Failed to initialize downloader.")));
 			return;
 		}
+
+		GKDownloadContext dlCtx{&file, &cancelRequested};
+		GKProgressContext progCtx{this, &cancelRequested};
 
 		std::string urlStr = url.toStdString();
 		curl_easy_setopt(curl, CURLOPT_URL, urlStr.c_str());
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_file_write);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &dlCtx);
+		curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_progress_cb);
+		curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progCtx);
+		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 		curl_easy_setopt(curl, CURLOPT_USERAGENT, "GK_OBS_Lite_AMD/" GK_OBS_LITE_VERSION);
-		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
+		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 600L);
 		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 		curl_obs_set_revoke_setting(curl);
 
 		CURLcode res = curl_easy_perform(curl);
 		file.close();
+		curl_easy_cleanup(curl);
 
-		if (res != CURLE_OK) {
-			file.remove();
-			QString err = QString("Download failed: %1").arg(curl_easy_strerror(res));
-			curl_easy_cleanup(curl);
-			QMetaObject::invokeMethod(this, "OnDownloadError",
-						  Qt::QueuedConnection,
-						  Q_ARG(QString, err));
+		if (cancelRequested) {
+			QFile::remove(path);
 			return;
 		}
 
-		curl_easy_cleanup(curl);
+		if (res != CURLE_OK) {
+			QFile::remove(path);
+			QMetaObject::invokeMethod(this, "OnDownloadError",
+						  Qt::QueuedConnection,
+						  Q_ARG(QString, QString("Download failed: %1").arg(curl_easy_strerror(res))));
+			return;
+		}
+
+		/* Verify file is not empty/corrupt */
+		QFileInfo fi(path);
+		if (!fi.exists() || fi.size() < 1024 * 100) { /* < 100KB is definitely corrupt */
+			QFile::remove(path);
+			QMetaObject::invokeMethod(this, "OnDownloadError",
+						  Qt::QueuedConnection,
+						  Q_ARG(QString, QString("Downloaded file is too small (%1 bytes). Possibly corrupt.").arg(fi.size())));
+			return;
+		}
+
 		QMetaObject::invokeMethod(this, "OnDownloadFinished", Qt::QueuedConnection);
 	});
 
 	connect(dlThread, &QThread::finished, dlThread, &QObject::deleteLater);
+	connect(dlThread, &QThread::finished, this, [this]() { dlThread = nullptr; });
 	dlThread->start();
 }
 
-void GKUpdateDialog::OnDownloadProgress(qint64 received, qint64 total)
+void GKUpdateDialog::OnDownloadProgress(int percent, double downloadedMB, double totalMB)
 {
-	if (total > 0) {
-		int percent = (int)((received * 100) / total);
-		progressBar->setValue(percent);
-		statusLabel->setText(QString("Downloading: %1 MB / %2 MB")
-					    .arg(received / 1048576.0, 0, 'f', 1)
-					    .arg(total / 1048576.0, 0, 'f', 1));
-	}
+	progressBar->setValue(percent);
+	statusLabel->setText(QString("Downloading: %1 MB / %2 MB (%3%)")
+				    .arg(downloadedMB, 0, 'f', 1)
+				    .arg(totalMB, 0, 'f', 1)
+				    .arg(percent));
 }
 
 void GKUpdateDialog::OnDownloadFinished()
 {
 	progressBar->setValue(100);
-	statusLabel->setText("Download complete. Installing...");
+	statusLabel->setText("Download complete. Launching installer...");
 
-	/* Launch the installer and exit OBS */
-	QProcess::startDetached(installerPath, QStringList());
-
-	/* Quit the app so the installer can replace files */
-	QApplication::quit();
+	/* Short delay to let UI update, then launch installer and quit */
+	QTimer::singleShot(500, this, [this]() {
+		QProcess::startDetached(installerPath, QStringList());
+		/* Give the installer a moment to start before we exit */
+		QTimer::singleShot(1000, qApp, &QApplication::quit);
+	});
 }
 
 void GKUpdateDialog::OnDownloadError(const QString &error)
@@ -284,6 +356,10 @@ void GKUpdateDialog::OnDownloadError(const QString &error)
 	updateButton->setEnabled(true);
 	updateButton->setText("Retry");
 	progressBar->setVisible(false);
+	cancelButton->setText("Later");
+	cancelButton->setEnabled(true);
+	disconnect(cancelButton, nullptr, nullptr, nullptr);
+	connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
 /* ============================================================
