@@ -8730,7 +8730,7 @@ void OBSBasic::UpdateTitleBar()
 	const char *sceneCollection = config_get_string(App()->GetUserConfig(), "Basic", "SceneCollection");
 
 #ifdef OBS_AMD_LITE
-	name << "GK_OBS_Lite_AMD 0.5.0";
+	name << "GK_OBS_Lite_AMD " GK_OBS_LITE_VERSION;
 #else
 	name << "OBS ";
 	if (previewProgramMode)
