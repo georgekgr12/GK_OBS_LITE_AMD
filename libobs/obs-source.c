@@ -3777,6 +3777,13 @@ static inline void reset_resampler(obs_source_t *source, const struct obs_source
 
 static void copy_audio_data(obs_source_t *source, const uint8_t *const data[], uint32_t frames, uint64_t ts)
 {
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Guard against shutdown race condition.
+	 * WASAPI can deliver audio callbacks after obs->audio.audio is freed
+	 * during obs_shutdown, causing access violation in copy_audio_data. */
+	if (!obs || !obs->audio.audio || !source || destroying(source))
+		return;
+#endif
 	size_t planes = audio_output_get_planes(obs->audio.audio);
 	size_t blocksize = audio_output_get_block_size(obs->audio.audio);
 	size_t size = (size_t)frames * blocksize;
