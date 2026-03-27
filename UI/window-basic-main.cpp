@@ -2420,12 +2420,18 @@ void OBSBasic::OBSInit()
 #endif
 
 #if defined(_WIN32) || defined(__APPLE__)
+#ifndef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Don't disable Check for Updates — we have our
+	 * own GitHub-based updater that works independently of the stock OBS
+	 * updater. The stock updater is disabled (opt_disable_updater=true)
+	 * but our updater should still be accessible. */
 	if (App()->IsUpdaterDisabled()) {
 		ui->actionCheckForUpdates->setEnabled(false);
 #if defined(_WIN32)
 		ui->actionRepair->setEnabled(false);
 #endif
 	}
+#endif
 #endif
 
 #ifndef WHATSNEW_ENABLED

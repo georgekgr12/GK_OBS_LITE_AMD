@@ -1132,7 +1132,10 @@ bool obs_graphics_thread_loop(struct obs_graphics_context *context)
 	 * This dramatically reduces GPU load when OBS is just sitting open. */
 	{
 		static uint64_t display_frame_counter = 0;
-		bool any_output_active = video_output_active(obs->video.video);
+		bool any_output_active = false;
+		struct obs_core_video_mix *mix = obs->video.main_mix;
+		if (mix)
+			any_output_active = os_atomic_load_long(&mix->gpu_encoder_active) > 0;
 		int skip = any_output_active ? 4 : 8;
 		if ((display_frame_counter++ % skip) == 0) {
 			profile_start(render_displays_name);

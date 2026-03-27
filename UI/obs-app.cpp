@@ -1360,7 +1360,15 @@ bool OBSApp::IsPortableMode()
 
 bool OBSApp::IsUpdaterDisabled()
 {
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Always report updater as enabled.
+	 * Our GitHub-based updater is independent from the stock OBS updater.
+	 * The stock auto-update is still disabled (opt_disable_updater=true)
+	 * but the Check for Updates menu item needs to stay clickable. */
+	return false;
+#else
 	return opt_disable_updater;
+#endif
 }
 
 bool OBSApp::IsMissingFilesCheckDisabled()

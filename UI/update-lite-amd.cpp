@@ -5,12 +5,8 @@
 #include <qt-wrappers.hpp>
 #include <util/platform.h>
 
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
+#include <curl/curl.h>
+#include <util/curl/curl-helper.h>
 #include <QFile>
 #include <QDir>
 #include <QProcess>
@@ -63,8 +59,10 @@ void GKUpdateThread::run()
 	versionHeader += GK_OBS_LITE_VERSION;
 
 	std::vector<std::string> extraHeaders;
+	extraHeaders.push_back(versionHeader);
+	extraHeaders.push_back("Accept: application/vnd.github.v3+json");
 	bool success = GetRemoteFile(GK_OBS_LITE_RELEASES_API, output, error, &responseCode, nullptr, std::string(),
-				     versionHeader.c_str(), extraHeaders, nullptr, 15);
+				     nullptr, extraHeaders, nullptr, 15, false);
 
 	if (!success || responseCode != 200) {
 		if (manualCheck) {
@@ -182,6 +180,13 @@ GKUpdateDialog::GKUpdateDialog(QWidget *parent, const QString &ver, const QStrin
 	}
 }
 
+/* Curl write callback — writes to a QFile */
+static size_t curl_file_write(void *ptr, size_t size, size_t nmemb, void *data)
+{
+	QFile *file = static_cast<QFile *>(data);
+	return file->write(static_cast<const char *>(ptr), size * nmemb);
+}
+
 void GKUpdateDialog::StartDownload()
 {
 	updateButton->setEnabled(false);
@@ -196,32 +201,58 @@ void GKUpdateDialog::StartDownload()
 		filename = "GK_OBS_Lite_AMD_Setup.exe";
 	installerPath = tempDir + "/" + filename;
 
-	auto *manager = new QNetworkAccessManager(this);
-	QUrl url(downloadUrl);
-	QNetworkRequest request(url);
-	request.setHeader(QNetworkRequest::UserAgentHeader, QByteArray("GK_OBS_Lite_AMD/" GK_OBS_LITE_VERSION));
-	/* Follow redirects (GitHub uses them for release assets) */
-	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-			     (int)QNetworkRequest::NoLessSafeRedirectPolicy);
+	/* Use a thread so UI stays responsive */
+	QString url = downloadUrl;
+	QString path = installerPath;
 
-	QNetworkReply *reply = manager->get(request);
-	connect(reply, &QNetworkReply::downloadProgress, this, &GKUpdateDialog::OnDownloadProgress);
-	connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-		if (reply->error() != QNetworkReply::NoError) {
-			OnDownloadError(reply->errorString());
-		} else {
-			/* Save to file */
-			QFile file(installerPath);
-			if (file.open(QIODevice::WriteOnly)) {
-				file.write(reply->readAll());
-				file.close();
-				OnDownloadFinished();
-			} else {
-				OnDownloadError("Failed to write installer to disk.");
-			}
+	QThread *dlThread = QThread::create([this, url, path]() {
+		QFile file(path);
+		if (!file.open(QIODevice::WriteOnly)) {
+			QMetaObject::invokeMethod(this, "OnDownloadError",
+						  Qt::QueuedConnection,
+						  Q_ARG(QString, "Failed to open file for writing."));
+			return;
 		}
-		reply->deleteLater();
+
+		CURL *curl = curl_easy_init();
+		if (!curl) {
+			file.close();
+			file.remove();
+			QMetaObject::invokeMethod(this, "OnDownloadError",
+						  Qt::QueuedConnection,
+						  Q_ARG(QString, "Failed to initialize downloader."));
+			return;
+		}
+
+		std::string urlStr = url.toStdString();
+		curl_easy_setopt(curl, CURLOPT_URL, urlStr.c_str());
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_file_write);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file);
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, "GK_OBS_Lite_AMD/" GK_OBS_LITE_VERSION);
+		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
+		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+		curl_obs_set_revoke_setting(curl);
+
+		CURLcode res = curl_easy_perform(curl);
+		file.close();
+
+		if (res != CURLE_OK) {
+			file.remove();
+			QString err = QString("Download failed: %1").arg(curl_easy_strerror(res));
+			curl_easy_cleanup(curl);
+			QMetaObject::invokeMethod(this, "OnDownloadError",
+						  Qt::QueuedConnection,
+						  Q_ARG(QString, err));
+			return;
+		}
+
+		curl_easy_cleanup(curl);
+		QMetaObject::invokeMethod(this, "OnDownloadFinished", Qt::QueuedConnection);
 	});
+
+	connect(dlThread, &QThread::finished, dlThread, &QObject::deleteLater);
+	dlThread->start();
 }
 
 void GKUpdateDialog::OnDownloadProgress(qint64 received, qint64 total)
