@@ -1071,6 +1071,16 @@ void OBSBasicSettings::LoadFormats()
 
 	ui->advOutFFFormat->blockSignals(false);
 
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Hybrid MP4 first — uses native muxer (no external
+	 * ffmpeg process), lower CPU overhead, crash-safe (recoverable on power loss). */
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("hMP4"), "hybrid_mp4");
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("MKV"), "mkv");
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("MP4"), "mp4");
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("fMP4"), "fragmented_mp4");
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("FLV"), "flv");
+	ui->simpleOutRecFormat->addItem(FORMAT_STR("TS"), "mpegts");
+#else
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("FLV"), "flv");
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("MKV"), "mkv");
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("MP4"), "mp4");
@@ -1079,6 +1089,7 @@ void OBSBasicSettings::LoadFormats()
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("fMP4"), "fragmented_mp4");
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("fMOV"), "fragmented_mov");
 	ui->simpleOutRecFormat->addItem(FORMAT_STR("TS"), "mpegts");
+#endif
 
 	ui->advOutRecFormat->addItem(FORMAT_STR("FLV"), "flv");
 	ui->advOutRecFormat->addItem(FORMAT_STR("MKV"), "mkv");
