@@ -1528,11 +1528,7 @@ bool obs_reset_audio2(const struct obs_audio_info2 *oai)
 		max_frames += (AUDIO_OUTPUT_FRAMES - 1);
 		audio->max_buffering_ticks = max_frames / AUDIO_OUTPUT_FRAMES;
 	} else {
-#ifdef OBS_AMD_LITE
-		audio->max_buffering_ticks = 18;
-#else
 		audio->max_buffering_ticks = 45;
-#endif
 	}
 	audio->fixed_buffer = oai->fixed_buffering;
 
