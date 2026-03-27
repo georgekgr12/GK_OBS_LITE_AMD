@@ -57,6 +57,7 @@
 #include "window-basic-stats.hpp"
 #ifdef OBS_AMD_LITE
 #include "update-lite-amd.hpp"
+#include "amd-gpu-info.hpp"
 #endif
 #include "window-basic-main-outputs.hpp"
 #include "window-basic-vcam-config.hpp"
@@ -1872,17 +1873,47 @@ void OBSBasic::InitBasicConfigDefaults2()
 	bool oldEncDefaults = config_get_bool(App()->GetUserConfig(), "General", "Pre23Defaults");
 
 #ifdef OBS_AMD_LITE
-	const char *defaultEnc = SIMPLE_ENCODER_X264;
-	if (!oldEncDefaults) {
-		if (EncoderAvailable("h265_texture_amf"))
-			defaultEnc = SIMPLE_ENCODER_AMD_HEVC;
+	/* OBS Lite AMD Edition: Auto-detect GPU generation and set optimal defaults */
+	AMDGPUInfo gpuInfo = DetectAMDGPU();
+	const char *defaultStreamEnc = SIMPLE_ENCODER_X264;
+	const char *defaultRecEnc = SIMPLE_ENCODER_X264;
+	if (!oldEncDefaults && gpuInfo.detected) {
+		/* Use generation-optimal encoder if available */
+		const char *enc = gpuInfo.defaultEncoder;
+		const char *recEnc = gpuInfo.defaultRecEncoder;
+		/* Verify the encoder is actually available (driver installed) */
+		if (strcmp(enc, SIMPLE_ENCODER_AMD_AV1) == 0 && EncoderAvailable("av1_texture_amf"))
+			defaultStreamEnc = enc;
+		else if (strcmp(enc, SIMPLE_ENCODER_AMD_HEVC) == 0 && EncoderAvailable("h265_texture_amf"))
+			defaultStreamEnc = enc;
+		else if (strcmp(enc, SIMPLE_ENCODER_AMD) == 0 && EncoderAvailable("h264_texture_amf"))
+			defaultStreamEnc = enc;
+		else if (EncoderAvailable("h265_texture_amf"))
+			defaultStreamEnc = SIMPLE_ENCODER_AMD_HEVC;
 		else if (EncoderAvailable("h264_texture_amf"))
-			defaultEnc = SIMPLE_ENCODER_AMD;
-		else if (EncoderAvailable("ffmpeg_nvenc"))
-			defaultEnc = SIMPLE_ENCODER_NVENC;
+			defaultStreamEnc = SIMPLE_ENCODER_AMD;
+
+		/* Same logic for recording encoder */
+		if (strcmp(recEnc, SIMPLE_ENCODER_AMD_AV1) == 0 && EncoderAvailable("av1_texture_amf"))
+			defaultRecEnc = recEnc;
+		else if (strcmp(recEnc, SIMPLE_ENCODER_AMD_HEVC) == 0 && EncoderAvailable("h265_texture_amf"))
+			defaultRecEnc = recEnc;
+		else if (strcmp(recEnc, SIMPLE_ENCODER_AMD) == 0 && EncoderAvailable("h264_texture_amf"))
+			defaultRecEnc = recEnc;
+		else
+			defaultRecEnc = defaultStreamEnc;
+
+		blog(LOG_INFO, "OBS Lite AMD: Auto-configured for %s — Stream: %s, Record: %s",
+		     GetGenerationName(gpuInfo.generation), defaultStreamEnc, defaultRecEnc);
+	} else if (!oldEncDefaults) {
+		/* Fallback if no AMD GPU detected */
+		if (EncoderAvailable("h265_texture_amf"))
+			defaultStreamEnc = defaultRecEnc = SIMPLE_ENCODER_AMD_HEVC;
+		else if (EncoderAvailable("h264_texture_amf"))
+			defaultStreamEnc = defaultRecEnc = SIMPLE_ENCODER_AMD;
 	}
-	config_set_default_string(activeConfiguration, "SimpleOutput", "StreamEncoder", defaultEnc);
-	config_set_default_string(activeConfiguration, "SimpleOutput", "RecEncoder", defaultEnc);
+	config_set_default_string(activeConfiguration, "SimpleOutput", "StreamEncoder", defaultStreamEnc);
+	config_set_default_string(activeConfiguration, "SimpleOutput", "RecEncoder", defaultRecEnc);
 #else
 	bool useNV = EncoderAvailable("ffmpeg_nvenc") && !oldEncDefaults;
 	config_set_default_string(activeConfiguration, "SimpleOutput", "StreamEncoder",

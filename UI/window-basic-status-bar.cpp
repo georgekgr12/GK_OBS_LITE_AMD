@@ -6,6 +6,9 @@
 #include "window-basic-main-outputs.hpp"
 #include "qt-wrappers.hpp"
 #include "platform.hpp"
+#ifdef OBS_AMD_LITE
+#include "amd-gpu-info.hpp"
+#endif
 
 #include "ui_StatusBarWidget.h"
 
@@ -222,6 +225,16 @@ void OBSBasicStatusBar::UpdateCPUUsage()
 
 	QString text;
 	text += QString("CPU: ") + QString::number(main->GetCPUUsage(), 'f', 1) + QString("%");
+
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Append GPU VRAM usage to CPU line */
+	AMDGPUStats gpuStats = QueryAMDGPUStats();
+	if (gpuStats.valid) {
+		text += QString("  |  VRAM: %1/%2 GB")
+				.arg(gpuStats.vramUsedMB / 1024.0, 0, 'f', 1)
+				.arg(gpuStats.vramTotalMB / 1024.0, 0, 'f', 1);
+	}
+#endif
 
 	statusWidget->ui->cpuUsage->setText(text);
 	statusWidget->ui->cpuUsage->setMinimumWidth(statusWidget->ui->cpuUsage->width());

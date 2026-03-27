@@ -8,6 +8,9 @@
 #include "multitrack-video-error.hpp"
 #include "window-basic-main.hpp"
 #include "window-basic-main-outputs.hpp"
+#ifdef OBS_AMD_LITE
+#include "amd-gpu-info.hpp"
+#endif
 #include "window-basic-vcam.hpp"
 
 using namespace std;
@@ -530,6 +533,15 @@ void SimpleOutput::LoadRecordingPreset_Lossless()
 void SimpleOutput::LoadRecordingPreset_Lossy(const char *encoderId)
 {
 	videoRecording = obs_video_encoder_create(encoderId, "simple_video_recording", nullptr, nullptr);
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD Edition: Smart encoder fallback.
+	 * If AMD hardware encoder fails (driver issue, GPU busy), fall back to x264. */
+	if (!videoRecording) {
+		blog(LOG_WARNING, "OBS Lite AMD: Hardware encoder '%s' failed for recording, falling back to x264",
+		     encoderId);
+		videoRecording = obs_video_encoder_create("obs_x264", "simple_video_recording", nullptr, nullptr);
+	}
+#endif
 	if (!videoRecording)
 		throw "Failed to create video recording encoder (simple output)";
 	obs_encoder_release(videoRecording);
@@ -538,6 +550,13 @@ void SimpleOutput::LoadRecordingPreset_Lossy(const char *encoderId)
 void SimpleOutput::LoadStreamingPreset_Lossy(const char *encoderId)
 {
 	videoStreaming = obs_video_encoder_create(encoderId, "simple_video_stream", nullptr, nullptr);
+#ifdef OBS_AMD_LITE
+	if (!videoStreaming) {
+		blog(LOG_WARNING, "OBS Lite AMD: Hardware encoder '%s' failed for streaming, falling back to x264",
+		     encoderId);
+		videoStreaming = obs_video_encoder_create("obs_x264", "simple_video_stream", nullptr, nullptr);
+	}
+#endif
 	if (!videoStreaming)
 		throw "Failed to create video streaming encoder (simple output)";
 	obs_encoder_release(videoStreaming);
@@ -950,7 +969,12 @@ void SimpleOutput::UpdateRecordingSettings_amd_cqp(int cqp)
 	 * affects how fast the encoder works, NOT the output quality at a given CQP.
 	 * "speed" lets the encoder finish faster, freeing GPU cycles for gaming.
 	 * Visual difference at CQP 16-18 between "quality" and "speed" is negligible. */
-	obs_data_set_string(settings, "preset", "speed");
+	/* Use GPU-generation-aware preset if available */
+	AMDGPUInfo gpuInfo = DetectAMDGPU();
+	if (gpuInfo.detected)
+		obs_data_set_string(settings, "preset", gpuInfo.defaultPreset);
+	else
+		obs_data_set_string(settings, "preset", "speed");
 #else
 	obs_data_set_string(settings, "preset", "quality");
 #endif
