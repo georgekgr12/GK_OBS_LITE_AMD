@@ -585,6 +585,17 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 
 	ui->simpleOutputVBitrate->setSingleStep(50);
 	ui->simpleOutputVBitrate->setSuffix(" Kbps");
+
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD: Hide advanced encoder options — keep UI clean */
+	ui->simpleOutAdvanced->setVisible(false);
+	ui->simpleOutAdvanced->setChecked(false);
+	ui->simpleOutCustom->setVisible(false);
+	ui->simpleOutCustomLabel->setVisible(false);
+	/* Hide audio encoder selector — AAC is universal, no need to choose */
+	ui->simpleOutStrAEncoder->setVisible(false);
+	ui->simpleOutStrAEncoderLabel->setVisible(false);
+#endif
 	ui->advOutFFVBitrate->setSingleStep(50);
 	ui->advOutFFVBitrate->setSuffix(" Kbps");
 	ui->advOutFFABitrate->setSuffix(" Kbps");
@@ -743,6 +754,13 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 		&OBSBasicSettings::SimpleStreamingEncoderChanged);
 	connect(ui->simpleOutStrEncoder, &QComboBox::currentIndexChanged, this,
 		&OBSBasicSettings::SimpleRecordingEncoderChanged);
+#ifdef OBS_AMD_LITE
+	/* Update hint labels when bitrate or preset changes */
+	connect(ui->simpleOutputVBitrate, &QSpinBox::valueChanged, this,
+		&OBSBasicSettings::SimpleStreamingEncoderChanged);
+	connect(ui->simpleOutPreset, &QComboBox::currentIndexChanged, this,
+		&OBSBasicSettings::SimpleStreamingEncoderChanged);
+#endif
 	connect(ui->simpleOutRecEncoder, &QComboBox::currentIndexChanged, this,
 		&OBSBasicSettings::SimpleRecordingEncoderChanged);
 	connect(ui->simpleOutRecAEncoder, &QComboBox::currentIndexChanged, this,
@@ -4925,6 +4943,55 @@ void OBSBasicSettings::SimpleStreamingEncoderChanged()
 		idx = ui->simpleOutPreset->findData(QVariant(defaultPreset));
 
 	ui->simpleOutPreset->setCurrentIndex(idx);
+
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD: Update hint labels with helpful descriptions */
+	{
+		/* Encoder hint */
+		QString encHint;
+		if (encoder == SIMPLE_ENCODER_AMD_AV1)
+			encHint = "AV1 — Best quality per bit. Recommended for YouTube and modern platforms.";
+		else if (encoder == SIMPLE_ENCODER_AMD_HEVC)
+			encHint = "HEVC — Great quality, widely supported. Use if AV1 is unavailable on your platform.";
+		else if (encoder == SIMPLE_ENCODER_AMD)
+			encHint = "H.264 — Maximum compatibility. Works with all streaming platforms.";
+		else
+			encHint = "Software encoding — uses CPU instead of GPU. Higher CPU usage.";
+		ui->simpleOutStrEncoderHint->setText(encHint);
+
+		/* Preset hint */
+		QString presetData = ui->simpleOutPreset->currentData().toString();
+		QString presetHint;
+		if (presetData == "speed")
+			presetHint = "Fastest encoding, minimal GPU impact. Good for competitive games.";
+		else if (presetData == "balanced")
+			presetHint = "Best balance of quality and performance. Recommended for most streams.";
+		else if (presetData == "quality")
+			presetHint = "Higher quality, slightly more GPU usage. Best for slower-paced content.";
+		else if (presetData == "highQuality")
+			presetHint = "Maximum quality. May impact game performance on demanding titles.";
+		else
+			presetHint = "";
+		ui->simpleOutPresetHint->setText(presetHint);
+	}
+
+	/* Bitrate hint — update based on current value */
+	{
+		int bitrate = ui->simpleOutputVBitrate->value();
+		QString bitrateHint;
+		if (bitrate >= 15000)
+			bitrateHint = "4K streaming range. Requires fast upload speed (20+ Mbps).";
+		else if (bitrate >= 7000)
+			bitrateHint = "High quality 1080p/1440p. Requires 10+ Mbps upload.";
+		else if (bitrate >= 4500)
+			bitrateHint = "Good for 1080p streaming. YouTube recommends 4500-9000 Kbps.";
+		else if (bitrate >= 2500)
+			bitrateHint = "Standard for 720p. Twitch recommends 2500-6000 Kbps.";
+		else
+			bitrateHint = "Low bitrate — suitable for 480p or slower connections.";
+		ui->simpleOutputVBitrateHint->setText(bitrateHint);
+	}
+#endif
 }
 
 #define ESTIMATE_STR "Basic.Settings.Output.ReplayBuffer.Estimate"

@@ -1737,11 +1737,31 @@ bool OBSBasic::InitBasicConfigDefaults()
 
 	config_set_default_string(activeConfiguration, "SimpleOutput", "FilePath", GetDefaultVideoSavePath().c_str());
 	config_set_default_string(activeConfiguration, "SimpleOutput", "RecFormat2", DEFAULT_CONTAINER);
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD: Smart bitrate default based on output resolution */
+	{
+		uint32_t out_cx = config_get_uint(activeConfiguration, "Video", "OutputCX");
+		uint32_t out_cy = config_get_uint(activeConfiguration, "Video", "OutputCY");
+		uint32_t pixels = out_cx * out_cy;
+		uint32_t defaultBitrate;
+		if (pixels >= 3840 * 2160)       defaultBitrate = 20000; /* 4K */
+		else if (pixels >= 2560 * 1440)  defaultBitrate = 9000;  /* 1440p */
+		else if (pixels >= 1920 * 1080)  defaultBitrate = 6000;  /* 1080p */
+		else                             defaultBitrate = 3000;  /* 720p */
+		config_set_default_uint(activeConfiguration, "SimpleOutput", "VBitrate", defaultBitrate);
+	}
+	config_set_default_uint(activeConfiguration, "SimpleOutput", "ABitrate", 128);
+#else
 	config_set_default_uint(activeConfiguration, "SimpleOutput", "VBitrate", 2500);
 	config_set_default_uint(activeConfiguration, "SimpleOutput", "ABitrate", 160);
+#endif
 	config_set_default_bool(activeConfiguration, "SimpleOutput", "UseAdvanced", false);
 	config_set_default_string(activeConfiguration, "SimpleOutput", "Preset", "veryfast");
 	config_set_default_string(activeConfiguration, "SimpleOutput", "NVENCPreset2", "p5");
+#ifdef OBS_AMD_LITE
+	config_set_default_string(activeConfiguration, "SimpleOutput", "AMDPreset", "balanced");
+	config_set_default_string(activeConfiguration, "SimpleOutput", "AMDAV1Preset", "balanced");
+#endif
 	config_set_default_string(activeConfiguration, "SimpleOutput", "RecQuality", "Stream");
 	config_set_default_bool(activeConfiguration, "SimpleOutput", "RecRB", false);
 	config_set_default_int(activeConfiguration, "SimpleOutput", "RecRBTime", 20);

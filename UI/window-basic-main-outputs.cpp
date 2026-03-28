@@ -794,6 +794,20 @@ void SimpleOutput::Update()
 	obs_data_set_string(videoSettings, "rate_control", "CBR");
 	obs_data_set_int(videoSettings, "bitrate", videoBitrate);
 
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD: Optimal streaming encoder flags for AMD hardware.
+	 * - vbaq: adaptive quantization for better quality at same bitrate
+	 * - bf=0: no B-frames for lower latency (important for live streaming)
+	 * - enforce_hrd: prevents bitrate spikes that cause buffering */
+	if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0 ||
+	    strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC) == 0 ||
+	    strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
+		obs_data_set_bool(videoSettings, "vbaq", true);
+		obs_data_set_bool(videoSettings, "enforce_hrd", true);
+		obs_data_set_int(videoSettings, "bf", 0);
+	}
+#endif
+
 	if (advanced)
 		obs_data_set_string(videoSettings, "x264opts", custom);
 
