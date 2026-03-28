@@ -6991,6 +6991,11 @@ void OBSBasic::StreamingStart()
 		youtubeAppDock->IngestionStarted();
 #endif
 
+#ifdef OBS_AMD_LITE
+	if (!isVisible())
+		SysTrayNotify(QStringLiteral("Streaming started"), QSystemTrayIcon::Information);
+#endif
+
 	blog(LOG_INFO, STREAMING_START);
 }
 
@@ -7069,6 +7074,11 @@ void OBSBasic::StreamingStop(int code, QString last_error)
 #ifdef YOUTUBE_ENABLED
 	if (YouTubeAppDock::IsYTServiceSelected())
 		youtubeAppDock->IngestionStopped();
+#endif
+
+#ifdef OBS_AMD_LITE
+	if (!isVisible() && code == OBS_OUTPUT_SUCCESS)
+		SysTrayNotify(QStringLiteral("Streaming stopped"), QSystemTrayIcon::Information);
 #endif
 
 	blog(LOG_INFO, STREAMING_STOP);
@@ -7213,6 +7223,11 @@ void OBSBasic::RecordingStart()
 
 	OnActivate();
 
+#ifdef OBS_AMD_LITE
+	if (!isVisible())
+		SysTrayNotify(QStringLiteral("Recording started"), QSystemTrayIcon::Information);
+#endif
+
 	blog(LOG_INFO, RECORDING_START);
 }
 
@@ -7223,6 +7238,11 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 
 	if (sysTrayRecord)
 		sysTrayRecord->setText(QTStr("Basic.Main.StartRecording"));
+
+#ifdef OBS_AMD_LITE
+	if (!isVisible() && code == OBS_OUTPUT_SUCCESS)
+		SysTrayNotify(QStringLiteral("Recording stopped"), QSystemTrayIcon::Information);
+#endif
 
 	blog(LOG_INFO, RECORDING_STOP);
 
@@ -7425,6 +7445,13 @@ void OBSBasic::ReplayBufferSaved()
 	calldata_free(&cd);
 
 	OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED);
+
+#ifdef OBS_AMD_LITE
+	if (!isVisible()) {
+		QString filename = QFileInfo(QT_UTF8(path.c_str())).fileName();
+		SysTrayNotify(QStringLiteral("Replay saved: %1").arg(filename), QSystemTrayIcon::Information);
+	}
+#endif
 
 	AutoRemux(QT_UTF8(path.c_str()));
 }
@@ -9264,7 +9291,11 @@ void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n
 {
 	if (trayIcon && trayIcon->isVisible() && QSystemTrayIcon::supportsMessages()) {
 		QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::MessageIcon(n);
+#ifdef OBS_AMD_LITE
+		trayIcon->showMessage("OBS Lite AMD", text, icon, 4000);
+#else
 		trayIcon->showMessage("OBS Studio", text, icon, 10000);
+#endif
 	}
 }
 
@@ -9975,6 +10006,11 @@ void OBSBasic::PauseRecording()
 
 		OnEvent(OBS_FRONTEND_EVENT_RECORDING_PAUSED);
 
+#ifdef OBS_AMD_LITE
+		if (!isVisible())
+			SysTrayNotify(QStringLiteral("Recording paused"), QSystemTrayIcon::Information);
+#endif
+
 		if (os_atomic_load_bool(&replaybuf_active))
 			ShowReplayBufferPauseWarning();
 	}
@@ -10007,6 +10043,11 @@ void OBSBasic::UnpauseRecording()
 		}
 
 		OnEvent(OBS_FRONTEND_EVENT_RECORDING_UNPAUSED);
+
+#ifdef OBS_AMD_LITE
+		if (!isVisible())
+			SysTrayNotify(QStringLiteral("Recording resumed"), QSystemTrayIcon::Information);
+#endif
 	}
 }
 
