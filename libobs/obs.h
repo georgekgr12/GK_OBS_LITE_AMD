@@ -437,6 +437,11 @@ EXPORT float obs_get_video_hdr_nominal_peak_level(void);
 /** Sets the video levels */
 EXPORT void obs_set_video_levels(float sdr_white_level, float hdr_nominal_peak_level);
 
+#ifdef OBS_AMD_LITE
+/** Sets the preview display frame skip factor (1=full FPS, 2=half, etc.) */
+EXPORT void obs_set_preview_fps_divisor(int active_divisor, int idle_divisor);
+#endif
+
 /** Gets the current audio settings, returns false if no audio */
 EXPORT bool obs_get_audio_info(struct obs_audio_info *oai);
 

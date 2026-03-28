@@ -21,6 +21,22 @@
 #include "obs.h"
 #include "obs-internal.h"
 #include "graphics/vec4.h"
+
+#ifdef OBS_AMD_LITE
+/* Preview FPS divisor: configurable from UI.
+ * active = when streaming/recording, idle = when nothing is running.
+ * Higher value = fewer preview frames = less CPU/GPU used. */
+static volatile long preview_fps_active_divisor = 2;
+static volatile long preview_fps_idle_divisor = 4;
+
+void obs_set_preview_fps_divisor(int active_divisor, int idle_divisor)
+{
+	os_atomic_set_long(&preview_fps_active_divisor,
+			   active_divisor > 0 ? active_divisor : 1);
+	os_atomic_set_long(&preview_fps_idle_divisor,
+			   idle_divisor > 0 ? idle_divisor : 1);
+}
+#endif
 #include "media-io/format-conversion.h"
 #include "media-io/video-frame.h"
 
@@ -1127,16 +1143,17 @@ bool obs_graphics_thread_loop(struct obs_graphics_context *context)
 
 #ifdef OBS_AMD_LITE
 	/* OBS Lite AMD Edition: Adaptive preview throttle.
-	 * When recording/streaming: render preview every 2nd frame (~30 FPS at 60Hz)
-	 * When idle (no outputs active): render every 4th frame (~15 FPS at 60Hz)
-	 * Uses dedicated VCN encoder silicon, so preview is the main GPU cost. */
+	 * Divisors are configurable from UI via obs_set_preview_fps_divisor(). */
 	{
 		static uint64_t display_frame_counter = 0;
 		bool any_output_active = false;
 		struct obs_core_video_mix *mix = obs->video.main_mix;
 		if (mix)
 			any_output_active = os_atomic_load_long(&mix->gpu_encoder_active) > 0;
-		int skip = any_output_active ? 2 : 4;
+		int skip = any_output_active
+			? (int)os_atomic_load_long(&preview_fps_active_divisor)
+			: (int)os_atomic_load_long(&preview_fps_idle_divisor);
+		if (skip < 1) skip = 1;
 		if ((display_frame_counter++ % skip) == 0) {
 			profile_start(render_displays_name);
 			render_displays();

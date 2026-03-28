@@ -468,6 +468,41 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	connect(this, &OBSBasic::CanvasResized, ui->previewScalingMode, &OBSPreviewScalingComboBox::CanvasResized);
 	connect(this, &OBSBasic::OutputResized, ui->previewScalingMode, &OBSPreviewScalingComboBox::OutputResized);
 
+#ifdef OBS_AMD_LITE
+	/* OBS Lite AMD: Configurable preview FPS to balance smoothness vs performance.
+	 * Data format: "active_divisor,idle_divisor" */
+	ui->previewFpsCombo->addItem("Full (60 FPS)", "1,2");
+	ui->previewFpsCombo->addItem("Smooth (30 FPS)", "2,4");
+	ui->previewFpsCombo->addItem("Balanced (20 FPS)", "3,6");
+	ui->previewFpsCombo->addItem("Efficient (15 FPS)", "4,8");
+	ui->previewFpsCombo->addItem("Minimal (10 FPS)", "6,12");
+
+	{
+		int savedIdx = config_get_int(App()->GetUserConfig(), "BasicWindow", "PreviewFpsIndex");
+		if (savedIdx < 0 || savedIdx >= ui->previewFpsCombo->count())
+			savedIdx = 1; /* default: Smooth (30 FPS) */
+		ui->previewFpsCombo->setCurrentIndex(savedIdx);
+
+		/* Apply the saved setting immediately */
+		QString data = ui->previewFpsCombo->currentData().toString();
+		QStringList parts = data.split(",");
+		if (parts.size() == 2)
+			obs_set_preview_fps_divisor(parts[0].toInt(), parts[1].toInt());
+	}
+
+	connect(ui->previewFpsCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+		QString data = ui->previewFpsCombo->itemData(idx).toString();
+		QStringList parts = data.split(",");
+		if (parts.size() == 2)
+			obs_set_preview_fps_divisor(parts[0].toInt(), parts[1].toInt());
+		config_set_int(App()->GetUserConfig(), "BasicWindow", "PreviewFpsIndex", idx);
+		config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
+	});
+#else
+	ui->previewFpsLabel->setVisible(false);
+	ui->previewFpsCombo->setVisible(false);
+#endif
+
 	delete shortcutFilter;
 	shortcutFilter = CreateShortcutFilter();
 	installEventFilter(shortcutFilter);
