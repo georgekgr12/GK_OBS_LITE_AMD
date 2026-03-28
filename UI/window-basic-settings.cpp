@@ -755,11 +755,41 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 	connect(ui->simpleOutStrEncoder, &QComboBox::currentIndexChanged, this,
 		&OBSBasicSettings::SimpleRecordingEncoderChanged);
 #ifdef OBS_AMD_LITE
-	/* Update hint labels when bitrate or preset changes */
-	connect(ui->simpleOutputVBitrate, &QSpinBox::valueChanged, this,
-		&OBSBasicSettings::SimpleStreamingEncoderChanged);
-	connect(ui->simpleOutPreset, &QComboBox::currentIndexChanged, this,
-		&OBSBasicSettings::SimpleStreamingEncoderChanged);
+	/* Update bitrate hint when value changes (lambda avoids recursive signal issues) */
+	connect(ui->simpleOutputVBitrate, &QSpinBox::valueChanged, this, [this](int bitrate) {
+		if (!ui->simpleOutputVBitrateHint)
+			return;
+		QString hint;
+		if (bitrate >= 15000)
+			hint = "4K streaming range. Requires fast upload speed (20+ Mbps).";
+		else if (bitrate >= 7000)
+			hint = "High quality 1080p/1440p. Requires 10+ Mbps upload.";
+		else if (bitrate >= 4500)
+			hint = "Good for 1080p streaming. YouTube recommends 4500-9000 Kbps.";
+		else if (bitrate >= 2500)
+			hint = "Standard for 720p. Twitch recommends 2500-6000 Kbps.";
+		else
+			hint = "Low bitrate — suitable for 480p or slower connections.";
+		ui->simpleOutputVBitrateHint->setText(hint);
+	});
+	/* Update preset hint when selection changes */
+	connect(ui->simpleOutPreset, &QComboBox::currentIndexChanged, this, [this]() {
+		if (!ui->simpleOutPresetHint || ui->simpleOutPreset->count() == 0)
+			return;
+		QString presetData = ui->simpleOutPreset->currentData().toString();
+		QString hint;
+		if (presetData == "speed")
+			hint = "Fastest encoding, minimal GPU impact. Good for competitive games.";
+		else if (presetData == "balanced")
+			hint = "Best balance of quality and performance. Recommended for most streams.";
+		else if (presetData == "quality")
+			hint = "Higher quality, slightly more GPU usage. Best for slower-paced content.";
+		else if (presetData == "highQuality")
+			hint = "Maximum quality. May impact game performance on demanding titles.";
+		else
+			hint = "";
+		ui->simpleOutPresetHint->setText(hint);
+	});
 #endif
 	connect(ui->simpleOutRecEncoder, &QComboBox::currentIndexChanged, this,
 		&OBSBasicSettings::SimpleRecordingEncoderChanged);
@@ -4945,9 +4975,8 @@ void OBSBasicSettings::SimpleStreamingEncoderChanged()
 	ui->simpleOutPreset->setCurrentIndex(idx);
 
 #ifdef OBS_AMD_LITE
-	/* OBS Lite AMD: Update hint labels with helpful descriptions */
-	{
-		/* Encoder hint */
+	/* OBS Lite AMD: Update encoder hint label */
+	if (ui->simpleOutStrEncoderHint) {
 		QString encHint;
 		if (encoder == SIMPLE_ENCODER_AMD_AV1)
 			encHint = "AV1 — Best quality per bit. Recommended for YouTube and modern platforms.";
@@ -4958,38 +4987,6 @@ void OBSBasicSettings::SimpleStreamingEncoderChanged()
 		else
 			encHint = "Software encoding — uses CPU instead of GPU. Higher CPU usage.";
 		ui->simpleOutStrEncoderHint->setText(encHint);
-
-		/* Preset hint */
-		QString presetData = ui->simpleOutPreset->currentData().toString();
-		QString presetHint;
-		if (presetData == "speed")
-			presetHint = "Fastest encoding, minimal GPU impact. Good for competitive games.";
-		else if (presetData == "balanced")
-			presetHint = "Best balance of quality and performance. Recommended for most streams.";
-		else if (presetData == "quality")
-			presetHint = "Higher quality, slightly more GPU usage. Best for slower-paced content.";
-		else if (presetData == "highQuality")
-			presetHint = "Maximum quality. May impact game performance on demanding titles.";
-		else
-			presetHint = "";
-		ui->simpleOutPresetHint->setText(presetHint);
-	}
-
-	/* Bitrate hint — update based on current value */
-	{
-		int bitrate = ui->simpleOutputVBitrate->value();
-		QString bitrateHint;
-		if (bitrate >= 15000)
-			bitrateHint = "4K streaming range. Requires fast upload speed (20+ Mbps).";
-		else if (bitrate >= 7000)
-			bitrateHint = "High quality 1080p/1440p. Requires 10+ Mbps upload.";
-		else if (bitrate >= 4500)
-			bitrateHint = "Good for 1080p streaming. YouTube recommends 4500-9000 Kbps.";
-		else if (bitrate >= 2500)
-			bitrateHint = "Standard for 720p. Twitch recommends 2500-6000 Kbps.";
-		else
-			bitrateHint = "Low bitrate — suitable for 480p or slower connections.";
-		ui->simpleOutputVBitrateHint->setText(bitrateHint);
 	}
 #endif
 }

@@ -93,6 +93,12 @@ void YoutubeAuth::SaveInternal()
 {
 	OBSBasic *main = OBSBasic::Get();
 	config_set_string(main->Config(), service(), "DockState", main->saveState().toBase64().constData());
+#ifdef BROWSER_AVAILABLE
+	/* Save chat dock geometry separately for reliable position restore */
+	if (chat)
+		config_set_string(main->Config(), service(), "ChatGeometry",
+				  chat->saveGeometry().toBase64().constData());
+#endif
 
 	const char *section_name = section.c_str();
 	config_set_string(main->Config(), section_name, "RefreshToken", refresh_token.c_str());
@@ -148,10 +154,9 @@ void YoutubeAuth::LoadUI()
 	chat->SetWidget(browser);
 	main->AddDockWidget(chat, Qt::RightDockWidgetArea);
 
-	chat->setFloating(true);
-	chat->move(pos.x() + size.width() - chat->width() - 50, pos.y() + 50);
-
 	if (firstLoad) {
+		chat->setFloating(true);
+		chat->move(pos.x() + size.width() - chat->width() - 50, pos.y() + 50);
 		chat->setVisible(true);
 	}
 #endif
@@ -160,10 +165,20 @@ void YoutubeAuth::LoadUI()
 
 	if (!firstLoad) {
 		const char *dockStateStr = config_get_string(main->Config(), service(), "DockState");
-		QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
-
-		if (main->isVisible() || !main->isMaximized())
+		if (dockStateStr && *dockStateStr) {
+			QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
 			main->restoreState(dockState);
+		}
+#ifdef BROWSER_AVAILABLE
+		/* Restore chat dock geometry separately (survives dock state issues) */
+		if (chat) {
+			const char *geomStr = config_get_string(main->Config(), service(), "ChatGeometry");
+			if (geomStr && *geomStr) {
+				QByteArray geom = QByteArray::fromBase64(QByteArray(geomStr));
+				chat->restoreGeometry(geom);
+			}
+		}
+#endif
 	}
 
 	uiLoaded = true;
