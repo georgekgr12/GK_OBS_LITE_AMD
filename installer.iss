@@ -2,7 +2,7 @@
 ; Packages the CMake RelWithDebInfo build output
 
 #define MyAppName "GK_OBS_Lite_AMD"
-#define MyAppVersion "0.6.1"
+#define MyAppVersion "0.7.0"
 #define MyAppPublisher "George Karagioules"
 #define MyAppExeName "obs64.exe"
 #define MyAppId "{{E7A3F1B2-5D8C-4A6E-9F0B-3C7D2E1A4B5F}"
@@ -59,7 +59,7 @@ Source: "{#BuildDir}\obs-plugins\*"; DestDir: "{app}\obs-plugins"; Flags: ignore
 ; Icon for uninstaller
 Source: "UI\cmake\windows\obs-studio.ico"; DestDir: "{app}\bin\64bit"; Flags: ignoreversion
 ; Portable mode sentinel (settings stored next to the app)
-Source: "installer_assets\portable_mode"; DestDir: "{app}"; Flags: ignoreversion
+Source: "installer_assets\portable_mode"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; License
 Source: "installer_assets\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -76,5 +76,8 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Filename: "{app}\bin\64bit\{#MyAppExeName}"; WorkingDir: "{app}\bin\64bit"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; Clean up config/logs on uninstall
-Type: filesandordirs; Name: "{app}\config"
+; Clean up logs and crash reports on uninstall; preserve user settings in config\
+Type: filesandordirs; Name: "{app}\config\obs-studio\logs"
+Type: filesandordirs; Name: "{app}\config\obs-studio\crashes"
+Type: filesandordirs; Name: "{app}\config\obs-studio\profiler_data"
+Type: filesandordirs; Name: "{app}\config\obs-studio\plugin_config\obs-browser"

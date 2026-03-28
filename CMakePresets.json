@@ -123,7 +123,7 @@
       "cacheVariables": {
         "GPU_PRIORITY_VAL": {"type": "STRING", "value": "$penv{GPU_PRIORITY_VAL}"},
         "VIRTUALCAM_GUID": {"type": "STRING", "value": "A3FCE0F5-3493-419F-958A-ABA1250EC20B"},
-        "ENABLE_BROWSER": false,
+        "ENABLE_BROWSER": true,
         "ENABLE_WEBSOCKET": false,
         "ENABLE_SCRIPTING": false,
         "ENABLE_AJA": false,
